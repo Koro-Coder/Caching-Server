@@ -1,4 +1,14 @@
 {
+  "name": "caching-proxy",
+  "version": "1.0.0",
+  "description": "A caching proxy server",
+  "main": "caching-proxy.js",
+  "bin": {
+    "caching-proxy": "./caching-proxy.js"
+  },
+  "scripts": {
+    "start": "node caching-proxy.js"
+  },
   "dependencies": {
     "axios": "^1.7.9",
     "commander": "^13.0.0"
