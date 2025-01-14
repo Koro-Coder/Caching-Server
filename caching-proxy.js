@@ -1,13 +1,81 @@
+#!/usr/bin/env node
+
 const { Command } = require('commander');
-const express = require('express');
-//const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+
+const CACHE_FILE = path.resolve(__dirname, 'cache.json');
+const CACHE_LIMIT = 10; // Maximum number of entries in the cache
 
 const program = new Command();
-const app = express();
-const cache = new Map();
+
+const loadCache = () => {
+  if (fs.existsSync(CACHE_FILE)) {
+    const data = fs.readFileSync(CACHE_FILE, 'utf-8');
+    return JSON.parse(data);
+  }
+  return {};
+};
+
+const saveCache = (cache) => {
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
+};
+
+const clearCache = () => {
+  if (fs.existsSync(CACHE_FILE)) {
+    fs.unlinkSync(CACHE_FILE);
+  }
+  console.log('Cache cleared.');
+};
 
 program
-    .option('-p, --port<number>', 'Port number for the proxy server', parseInt)
-    .action(()=>{
-        console.log('Hello')
-    })
+  .option('--port <number>', 'Port on which the proxy server runs', parseInt)
+  .option('--url <url>', 'Origin URL to forward requests')
+  .option('--clear-cache', 'Clear the cache and exit', false)
+  .action(async (options) => {
+    const { port, url, clearCache: shouldClearCache } = options;
+
+    if (shouldClearCache) {
+      clearCache();
+      return;
+    }
+
+    if (!port || !url) {
+      program.error('Both --port and --url are required.');
+      return;
+    }
+
+    const cache = loadCache();
+
+    if (cache[url]) {
+      console.log('Cache hit:', cache[url].response);
+      cache[url].timestamp = Date.now();
+      saveCache(cache);
+      return;
+    }
+
+    try {
+      const response = await axios.get(url);
+      console.log('Cache miss:', response.data);
+
+      cache[url] = {
+        response: response.data,
+        timestamp: Date.now(),
+      };
+
+      const keys = Object.keys(cache);
+      if (keys.length > CACHE_LIMIT) {
+        const lruKey = keys.reduce((oldest, key) =>
+          cache[key].timestamp < cache[oldest].timestamp ? key : oldest
+        );
+        delete cache[lruKey];
+      }
+
+      saveCache(cache);
+    } catch (err) {
+      console.error('Error fetching URL:', err.message);
+    }
+  });
+
+program.parse();
